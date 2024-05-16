@@ -12,19 +12,23 @@ Returns an Np × Np matrix, where V_mn = the n-th Bernstein basis evaluated at t
 
 We order the Bernstein basis with degrees (i,j,k) by dictionary order.
 
+Does not work for N > 20 because of factorial() limitations.
+
 # Arguments
 - `::Tri`: Tri structure
 - `N::Integer`: Bernstein basis degree
 - `r,s,t::AbstractArray{T,1}`: Np-sized vectors of distinct 2D barycentric coordinates to be used as interpolatory points
-
-TODO:
-Can we call evaluate_bernstein_derivatives only once? Can we not compute N! multiple times?
 """
 function bernstein_basis(::Tri, N, r, s, t)
     V = hcat([(factorial(N)/(factorial(i) * factorial(j) * factorial(N - i - j))) .* r.^i .* s.^j .* t.^(N - i - j) for i in 0:N for j in 0:N-i]...)
     Vi = hcat([evaluate_bernstein_derivatives(Tri(), N, r, s, t, i, j, N - i - j)[1] for i in 0:N for j in 0:N-i]...)
     Vj = hcat([evaluate_bernstein_derivatives(Tri(), N, r, s, t, i, j, N - i - j)[2] for i in 0:N for j in 0:N-i]...)
     Vk = hcat([evaluate_bernstein_derivatives(Tri(), N, r, s, t, i, j, N - i - j)[3] for i in 0:N for j in 0:N-i]...)
+    # drop small values
+    map!(x -> isapprox(x, 0, atol=1e-12) ? 0 : x, V, V)
+    map!(x -> isapprox(x, 0, atol=1e-12) ? 0 : x, Vi, Vi)
+    map!(x -> isapprox(x, 0, atol=1e-12) ? 0 : x, Vj, Vj)
+    map!(x -> isapprox(x, 0, atol=1e-12) ? 0 : x, Vk, Vk)
     return V, Vi, Vj, Vk
 end
  
@@ -70,28 +74,17 @@ function cartesian_to_barycentric(coords)
 end
 
 
-
-"""
-    multiindex_to_1dindex(a, N)
-
-Converts a tuple (multi-index) a into an integer (one-dimensional index) by dictionary order (e.g. (0, 0, 0, 0) 
-maps to 1, (0, 0, 0, 1) maps to 2, etc.).
-"""
-function multiindex_to_1dindex(a, N)
-    dim = length(a)
-    index = 1
-    for i in dim:-1:1
-        if a[i] > N
-            @error("Multi-index entry greater than N.")
-        end
-        index += a[i] * (N + 1)^(dim - i)
-    end
-    return index
+function evaluate_2dbernstein_derivative_matrices(N)
+    r, s = nodes(Tri(), N)
+    coords = transpose(hcat(r,s))
+    bary_coords = cartesian_to_barycentric(coords)
+    V, Vi, Vj, Vk = bernstein_basis(Tri(), N, bary_coords[1,:], bary_coords[2,:], bary_coords[3,:])
+    return V \ Vi, V \ Vj, V \ Vk
 end
+
 
 N = 3
 r, s = nodes(Tri(), N)
-scatter(r,s)
 coords = transpose(hcat(r,s))
 bary_coords = cartesian_to_barycentric(coords)
 map!(x -> isapprox(x, 0, atol=1e-12) ? 0 : x, bary_coords, bary_coords)
@@ -99,10 +92,13 @@ map!(x -> isapprox(x, 0, atol=1e-12) ? 0 : x, bary_coords, bary_coords)
 @btime V, Vi, Vj, Vk = bernstein_basis(Tri(), N, bary_coords[1,:], bary_coords[2,:], bary_coords[3,:])
 V, Vi, Vj, Vk = bernstein_basis(Tri(), N, bary_coords[1,:], bary_coords[2,:], bary_coords[3,:])
 Di = V \ Vi
-map!(x -> isapprox(x, 0, atol=1e-12) ? 0 : x, Di, Di)
+map!(x -> isapprox(x, 0, atol=1e-8) ? 0 : x, Di, Di)
 Dj = V \ Vj
-map!(x -> isapprox(x, 0, atol=1e-12) ? 0 : x, Dj, Dj)
+map!(x -> isapprox(x, 0, atol=1e-8) ? 0 : x, Dj, Dj)
 Dk = V \ Vk
-map!(x -> isapprox(x, 0, atol=1e-12) ? 0 : x, Dk, Dk)
+map!(x -> isapprox(x, 0, atol=1e-8) ? 0 : x, Dk, Dk)
+
+
+evaluate_2dbernstein_derivative_matrices(3)[1]
 
 
