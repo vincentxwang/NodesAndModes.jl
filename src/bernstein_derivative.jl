@@ -124,13 +124,13 @@ function fast!(out::Vector{T}, A::Bernstein2DDerivativeMatrix{N, DIR}, x::Vector
 end
 
 @testset "2D Bernstein derivative verification" begin
-    @test evaluate_2dbernstein_derivative_matrices(3)[1] ≈ Bernstein2DDerivativeMatrix{3,0}()
-    @test evaluate_2dbernstein_derivative_matrices(3)[2] ≈ Bernstein2DDerivativeMatrix{3,1}()
-    @test evaluate_2dbernstein_derivative_matrices(3)[3] ≈ Bernstein2DDerivativeMatrix{3,2}()
+    @test evaluate_bernstein_derivative_matrices(Tri(), 3)[1] ≈ Bernstein2DDerivativeMatrix{3,0}()
+    @test evaluate_bernstein_derivative_matrices(Tri(), 3)[2] ≈ Bernstein2DDerivativeMatrix{3,1}()
+    @test evaluate_bernstein_derivative_matrices(Tri(), 3)[3] ≈ Bernstein2DDerivativeMatrix{3,2}()
 
-    @test evaluate_2dbernstein_derivative_matrices(5)[1] ≈ Bernstein2DDerivativeMatrix{5,0}()
-    @test evaluate_2dbernstein_derivative_matrices(5)[2] ≈ Bernstein2DDerivativeMatrix{5,1}()
-    @test evaluate_2dbernstein_derivative_matrices(5)[3] ≈ Bernstein2DDerivativeMatrix{5,2}()
+    @test evaluate_bernstein_derivative_matrices(Tri(), 5)[1] ≈ Bernstein2DDerivativeMatrix{5,0}()
+    @test evaluate_bernstein_derivative_matrices(Tri(), 5)[2] ≈ Bernstein2DDerivativeMatrix{5,1}()
+    @test evaluate_bernstein_derivative_matrices(Tri(), 5)[3] ≈ Bernstein2DDerivativeMatrix{5,2}()
 end
 
 @testset "2D Bernstein fast! verification" begin
@@ -142,9 +142,9 @@ end
     b_5 = similar(x_5)
     b_7 = similar(x_7)
 
-    @test mul!(b_3, evaluate_2dbernstein_derivative_matrices(3)[1], x_3) ≈ fast!(b_3, Bernstein2DDerivativeMatrix{3,0}(), x_3)
-    @test mul!(b_5, evaluate_2dbernstein_derivative_matrices(5)[2], x_5) ≈ fast!(b_5, Bernstein2DDerivativeMatrix{5,0}(), x_5)
-    @test mul!(b_7, evaluate_2dbernstein_derivative_matrices(7)[3], x_7) ≈ fast!(b_7, Bernstein2DDerivativeMatrix{7,0}(), x_7)
+    @test mul!(b_3, evaluate_bernstein_derivative_matrices(Tri(), 3)[1], x_3) ≈ fast!(b_3, Bernstein2DDerivativeMatrix{3,0}(), x_3)
+    @test mul!(b_5, evaluate_bernstein_derivative_matrices(Tri(), 5)[2], x_5) ≈ fast!(b_5, Bernstein2DDerivativeMatrix{5,0}(), x_5)
+    @test mul!(b_7, evaluate_bernstein_derivative_matrices(Tri(), 7)[3], x_7) ≈ fast!(b_7, Bernstein2DDerivativeMatrix{7,0}(), x_7)
 end
 
 "Benchmarks"
@@ -154,7 +154,7 @@ end
 function test(N)
     x_N = rand(Float64, div((N + 1) * (N + 2), 2))
     b_N = similar(x_N)
-    A = evaluate_2dbernstein_derivative_matrices(N)[1]
+    A = evaluate_bernstein_derivative_matrices(Tri(), N)[1]
     B = Bernstein2DDerivativeMatrix{N, 0}()
 
     @btime mul!($b_N, $A, $x_N)
