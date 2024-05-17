@@ -14,10 +14,10 @@ The terms of the Bernstein basis are ordered dictionary-ordered by multiindex.
 - `DIR::Integer`: Direction of derivative. Only `0,1,2` permissible with `(i,j,k)` directions respectively.
 
 # values
-- `lookup::Vector{Tuple{Int64, Int64, Int64}}`: Vector that maps scalars to multiindex
+- `lookup::Vector{Tuple{Int, Int, Int}}`: Vector that maps scalars to multiindex. Should not be manually specified.
 """
 struct Bernstein2DDerivativeMatrix{N, DIR} <: AbstractMatrix{Int}
-    lookup::Vector{Tuple{Int64, Int64, Int64}}
+    lookup::Vector{Tuple{Int, Int, Int}}
 end
 
 function Bernstein2DDerivativeMatrix{N, DIR}() where {N, DIR}
@@ -107,7 +107,21 @@ function bernstein_3d_scalar_to_multiindex_lookup(N)
     return filter(tup -> tup[1] + tup[2] + tup[3] + tup[4] == N, table)
 end
 
-
+"""
+TODO: currently, this only implements the 0-direction derivative"
+rewrites out to compute A x
+"""
+function fast!(out::Vector{T}, A::Bernstein2DDerivativeMatrix{N, DIR}, x::Vector{T}) where {T, N, DIR}
+    Np = length(A.lookup)
+    for index in 1:Np
+        (i,j,k) = A.lookup[index]
+        coeff = i
+        if j >= 1 coeff += j end
+        if k >= 1 coeff += k end
+        out[index] = coeff * x[index]
+    end
+    return out
+end
 
 @testset "2D Bernstein derivative verification" begin
     @test evaluate_2dbernstein_derivative_matrices(3)[1] ≈ Bernstein2DDerivativeMatrix{3,0}()
@@ -137,34 +151,17 @@ end
 
 "zero optimization, N = 3, N = 5, N = 7"
 
-x_3 = rand(Float64, div((3 + 1) * (3 + 2), 2))
-x_5 = rand(Float64, div((5 + 1) * (5 + 2), 2))
-x_7 = rand(Float64, div((7 + 1) * (7 + 2), 2))
+function test(N)
+    x_N = rand(Float64, div((N + 1) * (N + 2), 2))
+    b_N = similar(x_N)
+    A = evaluate_2dbernstein_derivative_matrices(N)[1]
+    B = Bernstein2DDerivativeMatrix{N, 0}()
 
-b_3 = similar(x_3)
-b_5 = similar(x_5)
-b_7 = similar(x_7)
-
-@btime mul!(b_3, $(evaluate_2dbernstein_derivative_matrices(3)[1]), x_3)
-@btime mul!(b_5, $(evaluate_2dbernstein_derivative_matrices(5)[1]), x_5)
-@btime mul!(b_7, $(evaluate_2dbernstein_derivative_matrices(7)[1]), x_7)
-
-@btime fast!(b_3, $(Bernstein2DDerivativeMatrix{3,0}()), x_3)
-@btime fast!(b_5, $(Bernstein2DDerivativeMatrix{5,0}()), x_5)
-@btime fast!(b_7, $(Bernstein2DDerivativeMatrix{7,0}()), x_7)
-
-
-"TODO: currently, this only implements the 0-direction derivative"
-"rewrites out to compute A x"
-function fast!(out::Vector{T}, A::Bernstein2DDerivativeMatrix{N, DIR}, x::Vector{T}) where {T, N, DIR}
-    Np = length(A.lookup)
-    for index in 1:Np
-        (i,j,k) = A.lookup[index]
-        coeff = i
-        if j >= 1 coeff += j end
-        if k >= 1 coeff += k end
-        out[index] = coeff * x[index]
-    end
-    return out
+    @btime mul!($b_N, $A, $x_N)
+    @btime fast!($b_N, $B, $x_N)
 end
 
+test(3)
+test(5)
+test(7)
+test(15)
