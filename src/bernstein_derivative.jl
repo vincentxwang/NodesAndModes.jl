@@ -1,126 +1,45 @@
 using Test
-
-"""
-bernstein.jl
-"""
-
 using LinearAlgebra
-using Plots
-using NodesAndModes
-using Test
 using BenchmarkTools
-using SparseArrays
 
 """
-    bernstein_basis(::Tri, N, r, s, t)
+    Bernstein2DDerivativeMatrix{N, DIR} <: AbstractArray{Int, 2}
 
-Returns an Np × Np matrix, where V_mn = the n-th Bernstein basis evaluated at the m-th point, followed by its derivative matrices.
+An `AbstractArray` subtype that represents the derivative matrix of the 2-dimensional degree N Bernstein basis.
 
-We order the Bernstein basis with degrees (i,j,k) by dictionary order.
+The terms of the Bernstein basis are ordered dictionary-ordered by multiindex.
 
-Does not work for N > 20 because of factorial() limitations.
+# Type Parameters
+- `N::Int`: Bernstein basis degree
+- `DIR::Integer`: Direction of derivative. Only `0,1,2` permissible with `(i,j,k)` directions respectively.
 
-# Arguments
-- `::Tri`: Tri structure
-- `N::Integer`: Bernstein basis degree
-- `r,s,t::AbstractArray{T,1}`: Np-sized vectors of distinct 2D barycentric coordinates to be used as interpolatory points
+# values
+- `lookup::Vector{Tuple{Int64, Int64, Int64}}`: Vector that maps scalars to multiindex
 """
-function bernstein_basis(::Tri, N, r, s, t)
-    V = hcat([(factorial(N)/(factorial(i) * factorial(j) * factorial(N - i - j))) .* r.^i .* s.^j .* t.^(N - i - j) for i in 0:N for j in 0:N-i]...)
-    Vi = hcat([evaluate_bernstein_derivatives(Tri(), N, r, s, t, i, j, N - i - j)[1] for i in 0:N for j in 0:N-i]...)
-    Vj = hcat([evaluate_bernstein_derivatives(Tri(), N, r, s, t, i, j, N - i - j)[2] for i in 0:N for j in 0:N-i]...)
-    Vk = hcat([evaluate_bernstein_derivatives(Tri(), N, r, s, t, i, j, N - i - j)[3] for i in 0:N for j in 0:N-i]...)
-    # drop small values
-    map!(x -> isapprox(x, 0, atol=1e-12) ? 0 : x, V, V)
-    map!(x -> isapprox(x, 0, atol=1e-12) ? 0 : x, Vi, Vi)
-    map!(x -> isapprox(x, 0, atol=1e-12) ? 0 : x, Vj, Vj)
-    map!(x -> isapprox(x, 0, atol=1e-12) ? 0 : x, Vk, Vk)
-    return V, Vi, Vj, Vk
+struct Bernstein2DDerivativeMatrix{N, DIR} <: AbstractMatrix{Int}
+    lookup::Vector{Tuple{Int64, Int64, Int64}}
 end
- 
-"""
-    evaluate_bernstein_derivatives(::Tri, N, r, s, t, i, j, k)
+Bernstein2DDerivativeMatrix{N, DIR}() where {N, DIR} = Bernstein2DDerivativeMatrix{N, DIR}(bernstein_2d_scalar_to_multiindex_lookup(N))
 
-Evaluates the derivatives of the (i, j, k)-th 2D Bernstein basis function at points defined by r, s, t. Throws error if ``i + j + k != N ``.
-
-Outputs a vector for each direction.
-"""
-function evaluate_bernstein_derivatives(::Tri, N, r, s, t, i, j, k)
-    if i + j + k != N
-        @error("Barycentric coordinates do not sum to total degree.")
-    end
-    if i > 0
-        vi = (factorial(N)/(factorial(i-1) * factorial(j) * factorial(k))) .* r.^(i-1) .* s.^j .* t.^k
-    else 
-        # vector with all zeros
-        vi = 0 .* r
-    end
-    if j > 0
-        vj = (factorial(N)/(factorial(i) * factorial(j-1) * factorial(k))) .* r.^i .* s.^(j-1) .* t.^k
-    else 
-        # vector with all zeros
-        vj = 0 .* s
-    end
-    if k > 0
-        vk = (factorial(N)/(factorial(i) * factorial(j) * factorial(k-1))) .* r.^i .* s.^j .* t.^(k-1)
-    else 
-        # vector with all zeros
-        vk = 0 .* t
-    end
-    return vi, vj, vk
-end
-
-"""
-    cartesian_to_barycentric(coords)
-
-Converts a matrix of 2D cartesian coordinates into a matrix of barycentric coordinates.
-"""
-function cartesian_to_barycentric(coords)
-    hcat([[(col[2] + 1) / 2, - (col[1] + col[2])/2, (col[1] + 1) / 2] for col in eachcol(coords)]...)
-end
-
-
-
-function evaluate_2dbernstein_derivative_matrices(N)
-    r, s = nodes(Tri(), N)
-    coords = transpose(hcat(r,s))
-    bary_coords = cartesian_to_barycentric(coords)
-    V, Vi, Vj, Vk = bernstein_basis(Tri(), N, bary_coords[1,:], bary_coords[2,:], bary_coords[3,:])
-    return V \ Vi, V \ Vj, V \ Vk
-end
-
-"""
-new content
-"""
-
-
-"Q: what to put here? integer? or just T...?"
-struct Bernstein2DDerivativeMatrix <: AbstractArray{Int, 2}
-    N::Int
-    dir::Int
-end
-
-function Base.size(D::Bernstein2DDerivativeMatrix)
-    Np = div((D.N + 1) * (D.N + 2), 2)
+function Base.size(::Bernstein2DDerivativeMatrix{N, DIR}) where {N, DIR}
+    Np = div((N + 1) * (N + 2), 2)
     return (Np, Np)
 end
 
-function Base.getindex(D::Bernstein2DDerivativeMatrix, m::Int, n::Int)
-    a_m = bernstein_scalar_to_multiindex(m, D.N, 2)
-    a_n = bernstein_scalar_to_multiindex(n, D.N, 2)
+function Base.getindex(::Bernstein2DDerivativeMatrix{N, DIR}, m::Int, n::Int) where {N, DIR}
+    a_m = bernstein_scalar_to_multiindex(m, N, 2)
+    a_n = bernstein_scalar_to_multiindex(n, N, 2)
 
-    row_lookup = bernstein_2d_derivative_index_to_coefficient(a_n, D.dir)
+    row_lookup = bernstein_2d_derivative_index_to_coefficient(a_n, DIR)
     return get(row_lookup, a_m, 0)
 end
 
 """
-b - fixed column, multiindex
-dir - direction
+    bernstein_2d_derivative_index_to_coefficient(b, dir)
 
-returns dictionary
+Returns a dictionary that maps row multiindices to coefficients of the 2D Bernstein derivative matrix in a fixed column b.
 """
 function bernstein_2d_derivative_index_to_coefficient(b, dir)
-    "Q: what would be better for indexing? 0, 1, 2 like the paper? or 1, 2, 3? or string?"
     if dir == 0
         return Dict(
             (b[1],      b[2],       b[3])       => b[1],
@@ -142,7 +61,7 @@ end
 """
     bernstein_multiindex_to_scalar(a, N)
 
-Finds the scalar index of the Bernstein basis function defined by a, according to dictionary order.
+Finds the scalar index of the 2D/3D Bernstein basis function defined by the multi-index a, according to dictionary order.
 """
 function bernstein_multiindex_to_scalar(a, N)
     dim = length(a) - 1
@@ -169,23 +88,82 @@ function bernstein_scalar_to_multiindex(index, N, dim)
     return lookup[index]
 end
 
+"""
+    bernstein_2d_scalar_to_multiindex_lookup(N)
+
+Creates a vector where the `i`-th scalar index maps to the corresponding multi-index.
+"""
 function bernstein_2d_scalar_to_multiindex_lookup(N)
     table = [(i,j,k) for i in 0:N for j in 0:N for k in 0:N]
     return filter(tup -> tup[1] + tup[2] + tup[3] == N, table)
 end
+
+bernstein_2d_scalar_to_multiindex_lookup(4)
 
 function bernstein_3d_scalar_to_multiindex_lookup(N)
     table = [(i,j,k,l) for i in 0:N for j in 0:N for k in 0:N for l in 0:N]
     return filter(tup -> tup[1] + tup[2] + tup[3] + tup[4] == N, table)
 end
 
-@testset "Bernstein derivative verification" begin
-    @test evaluate_2dbernstein_derivative_matrices(3)[1] ≈ Bernstein2DDerivativeMatrix(3,0)
-    @test evaluate_2dbernstein_derivative_matrices(3)[2] ≈ Bernstein2DDerivativeMatrix(3,1)
-    @test evaluate_2dbernstein_derivative_matrices(3)[3] ≈ Bernstein2DDerivativeMatrix(3,2)
 
-    @test evaluate_2dbernstein_derivative_matrices(5)[1] ≈ Bernstein2DDerivativeMatrix(5,0)
-    @test evaluate_2dbernstein_derivative_matrices(5)[2] ≈ Bernstein2DDerivativeMatrix(5,1)
-    @test evaluate_2dbernstein_derivative_matrices(5)[3] ≈ Bernstein2DDerivativeMatrix(5,2)
+
+@testset "2D Bernstein derivative verification" begin
+    @test evaluate_2dbernstein_derivative_matrices(3)[1] ≈ Bernstein2DDerivativeMatrix{3,0}()
+    @test evaluate_2dbernstein_derivative_matrices(3)[2] ≈ Bernstein2DDerivativeMatrix{3,1}()
+    @test evaluate_2dbernstein_derivative_matrices(3)[3] ≈ Bernstein2DDerivativeMatrix{3,2}()
+
+    @test evaluate_2dbernstein_derivative_matrices(5)[1] ≈ Bernstein2DDerivativeMatrix{5,0}()
+    @test evaluate_2dbernstein_derivative_matrices(5)[2] ≈ Bernstein2DDerivativeMatrix{5,1}()
+    @test evaluate_2dbernstein_derivative_matrices(5)[3] ≈ Bernstein2DDerivativeMatrix{5,2}()
 end
 
+@testset "2D Bernstein mul verification" begin
+    x_3 = rand(Float64, div((3 + 1) * (3 + 2), 2))
+    x_5 = rand(Float64, div((5 + 1) * (5 + 2), 2))
+    x_7 = rand(Float64, div((7 + 1) * (7 + 2), 2))
+
+    b_3 = similar(x_3)
+    b_5 = similar(x_5)
+    b_7 = similar(x_7)
+
+    @test mul!(b_3, evaluate_2dbernstein_derivative_matrices(3)[1], x_3) ≈ mul!(b_3, Bernstein2DDerivativeMatrix{3,0}(), x_3)
+    @test mul!(b_5, evaluate_2dbernstein_derivative_matrices(5)[2], x_5) ≈ mul!(b_5, Bernstein2DDerivativeMatrix{5,0}(), x_5)
+    @test mul!(b_7, evaluate_2dbernstein_derivative_matrices(7)[3], x_7) ≈ mul!(b_7, Bernstein2DDerivativeMatrix{7,0}(), x_7)
+end
+
+"Benchmarks"
+
+"zero optimization, N = 3, N = 5, N = 7"
+
+x_3 = rand(Float64, div((3 + 1) * (3 + 2), 2))
+x_5 = rand(Float64, div((5 + 1) * (5 + 2), 2))
+x_7 = rand(Float64, div((7 + 1) * (7 + 2), 2))
+
+b_3 = similar(x_3)
+b_5 = similar(x_5)
+b_7 = similar(x_7)
+
+@btime mul!(b_3, $(evaluate_2dbernstein_derivative_matrices(3)[1]), x_3)
+@btime mul!(b_5, $(evaluate_2dbernstein_derivative_matrices(5)[1]), x_5)
+@btime mul!(b_7, $(evaluate_2dbernstein_derivative_matrices(7)[1]), x_7)
+
+@btime mul!(b_3, $(Bernstein2DDerivativeMatrix{3,0}()), x_3)
+@btime mul!(b_5, $(Bernstein2DDerivativeMatrix{5,0}()), x_5)
+@btime mul!(b_7, $(Bernstein2DDerivativeMatrix{7,0}()), x_7)
+
+"TODO: ONLY 0TH DIMENSION IMPLEMENTED FOR NOW."
+function LinearAlgebra.mul!(out::AbstractMatrix{T}, A::Bernstein2DDerivativeMatrix{N, DIR}, x::AbstractMatrix{T}) where {T, N, DIR}
+    out .= 0.0
+    Np = length(A.lookup)
+    for index in 1:Np
+        (i,j,k) = lookup[index]
+        y[index] += i
+        if j >= 1
+            y[index] += j
+        end
+        if k >= 1
+            y[index] += k
+        end
+        y[index] *= x[index]
+    end
+end

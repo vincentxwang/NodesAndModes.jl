@@ -8,15 +8,15 @@ using SparseArrays
 """
     bernstein_basis(::Tri, N, r, s, t)
 
-Returns an Np × Np matrix, where V_mn = the n-th Bernstein basis evaluated at the m-th point, followed by its derivative matrices.
+Returns a Np × Np matrix V, where V_mn = the n-th Bernstein basis evaluated at the m-th point, followed by its derivative matrices.
 
-We order the Bernstein basis with degrees (i,j,k) by dictionary order.
+We order the Bernstein basis according to exponents in dictonary order.
 
 Does not work for N > 20 because of factorial() limitations.
 
 # Arguments
 - `::Tri`: Tri structure
-- `N::Integer`: Bernstein basis degree
+- `N::Int`: Bernstein basis degree
 - `r,s,t::AbstractArray{T,1}`: Np-sized vectors of distinct 2D barycentric coordinates to be used as interpolatory points
 """
 function bernstein_basis(::Tri, N, r, s, t)
@@ -73,31 +73,13 @@ function cartesian_to_barycentric(coords)
     hcat([[(col[2] + 1) / 2, - (col[1] + col[2])/2, (col[1] + 1) / 2] for col in eachcol(coords)]...)
 end
 
-
 function evaluate_2dbernstein_derivative_matrices(N)
     r, s = nodes(Tri(), N)
     coords = transpose(hcat(r,s))
     bary_coords = cartesian_to_barycentric(coords)
     V, Vi, Vj, Vk = bernstein_basis(Tri(), N, bary_coords[1,:], bary_coords[2,:], bary_coords[3,:])
-    return V \ Vi, V \ Vj, V \ Vk
+    return round.(Int, V \ Vi), round.(Int, V \ Vj), round.(Int, V \ Vk)
 end
-
-
-N = 3
-r, s = nodes(Tri(), N)
-coords = transpose(hcat(r,s))
-bary_coords = cartesian_to_barycentric(coords)
-map!(x -> isapprox(x, 0, atol=1e-12) ? 0 : x, bary_coords, bary_coords)
-
-@btime V, Vi, Vj, Vk = bernstein_basis(Tri(), N, bary_coords[1,:], bary_coords[2,:], bary_coords[3,:])
-V, Vi, Vj, Vk = bernstein_basis(Tri(), N, bary_coords[1,:], bary_coords[2,:], bary_coords[3,:])
-Di = V \ Vi
-map!(x -> isapprox(x, 0, atol=1e-8) ? 0 : x, Di, Di)
-Dj = V \ Vj
-map!(x -> isapprox(x, 0, atol=1e-8) ? 0 : x, Dj, Dj)
-Dk = V \ Vk
-map!(x -> isapprox(x, 0, atol=1e-8) ? 0 : x, Dk, Dk)
-
 
 evaluate_2dbernstein_derivative_matrices(3)[1]
 
