@@ -1,8 +1,4 @@
-using LinearAlgebra
-using Plots
 using NodesAndModes
-using Test
-using BenchmarkTools
 
 """
     bernstein_basis(::Union{Tri, Tet}, N, r, s, t)
@@ -111,7 +107,7 @@ function evaluate_bernstein_derivative_matrices(::Tet, N)
     return round.(Int, V \ Vi), round.(Int, V \ Vj), round.(Int, V \ Vk), round.(Int, V \ Vl)
 end
 
-evaluate_bernstein_derivative_matrices(Tri(), 3)[1]
-evaluate_bernstein_derivative_matrices(Tet(), 2)[1]
+evaluate_bernstein_derivative_matrices(Tri(), 7)[1]
+evaluate_bernstein_derivative_matrices(Tet(), 7)[1]
 
 
