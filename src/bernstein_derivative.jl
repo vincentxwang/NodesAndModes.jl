@@ -14,16 +14,45 @@ The terms of the Bernstein basis are ordered dictionary-ordered by multiindex.
 - `DIR::Integer`: Direction of derivative. Only `0,1,2` permissible with `(i,j,k)` directions respectively.
 
 # values
-- `lookup::Vector{Tuple{Int, Int, Int}}`: Vector that maps scalars to multiindex. Should not be manually specified.
+- `scalar_to_multiindex::Vector{Tuple{Int, Int, Int}}`: Maps scalars to multiindex. 
+- `multiindex_to_scalar::Dict}`: Maps multiindex to scalars.
+- `multiplication_table::Vector{Vector{Tuple{Int, Int}}}`: Used to optimize the calculation of matrix-vector multiplication 
+   for Bernstein basis derivative matrices. Each entry in the outer vector corresponds to a row in the derivative matrix, and 
+   each entry in the inner vector is a tuple representing a non-zero element in that row. The tuple consists of:
+    - The index of the column.
+    - The coefficient of the corresponding element.
+    
+e.g. for a Bernstein basis derivative matrix with 3 rows, `multiplication_table` might look like this:
+
+```julia
+[
+    [(1, 2), (3, 1)], # Row 1: 2*x[1] + 1*x[3]
+    [(2, 1), (4, 3)], # Row 2: 1*x[2] + 3*x[4]
+    [(3, 4)]          # Row 3: 4*x[3]
+]
+```
 """
 struct Bernstein2DDerivativeMatrix{N, DIR} <: AbstractMatrix{Int}
-    lookup::Vector{Tuple{Int, Int, Int}}
+    scalar_to_multiindex::Vector{Tuple{Int, Int, Int}}
+    multiindex_to_scalar::Dict
+    multiplication_table::Vector{Vector{Tuple{Int, Int}}}
 end
 
 function Bernstein2DDerivativeMatrix{N, DIR}() where {N, DIR}
-    lookup = bernstein_2d_scalar_to_multiindex_lookup(N)
-    return Bernstein2DDerivativeMatrix{N, DIR}(lookup)
+    scalar_to_multiindex, multiindex_to_scalar = bernstein_2d_scalar_multiindex_lookup(N)
+    multiplication_table = []
+    for index in 1:length(scalar_to_multiindex) #1:Np
+        (i,j,k) = scalar_to_multiindex[index]
+        entries = [(index, i)]
+        if j >= 1 push!(entries, (multiindex_to_scalar[(i+1,j-1,k)], j)) end
+        if k >= 1 push!(entries, (multiindex_to_scalar[(i+1,j,k-1)], k)) end
+        push!(multiplication_table, entries)
+    end
+    return Bernstein2DDerivativeMatrix{N, DIR}(scalar_to_multiindex, multiindex_to_scalar, multiplication_table)
 end
+
+A = Bernstein2DDerivativeMatrix{3, 0}()
+A.multiplication_table
 
 function Base.size(::Bernstein2DDerivativeMatrix{N, DIR}) where {N, DIR}
     Np = div((N + 1) * (N + 2), 2)
@@ -70,7 +99,7 @@ Finds the scalar index of the 2D/3D Bernstein basis function defined by the mult
 function bernstein_multiindex_to_scalar(a, N)
     dim = length(a) - 1
     if dim == 2
-        lookup = bernstein_2d_scalar_to_multiindex_lookup(N)
+        lookup = bernstein_2d_scalar_multiindex_lookup(N)[1]
     elseif dim == 3
         lookup = bernstein_3d_scalar_to_multiindex_lookup(N)
     else
@@ -82,7 +111,7 @@ end
 
 function bernstein_scalar_to_multiindex(index, N, dim)
     if dim == 2
-        lookup = bernstein_2d_scalar_to_multiindex_lookup(N)
+        lookup = bernstein_2d_scalar_multiindex_lookup(N)[1]
     elseif dim == 3
         lookup = bernstein_3d_scalar_to_multiindex_lookup(N)
     else
@@ -93,13 +122,15 @@ function bernstein_scalar_to_multiindex(index, N, dim)
 end
 
 """
-    bernstein_2d_scalar_to_multiindex_lookup(N)
+    bernstein_2d_scalar_multiindex_lookup(N)
 
 Creates a vector where the `i`-th scalar index maps to the corresponding multi-index.
 """
-function bernstein_2d_scalar_to_multiindex_lookup(N)
-    table = [(i,j,k) for i in 0:N for j in 0:N for k in 0:N]
-    return filter(tup -> tup[1] + tup[2] + tup[3] == N, table)
+function bernstein_2d_scalar_multiindex_lookup(N)
+    scalar_to_multiindex = [(i,j,k) for i in 0:N for j in 0:N for k in 0:N]
+    scalar_to_multiindex = filter(tup -> tup[1] + tup[2] + tup[3] == N, scalar_to_multiindex)
+    multiindex_to_scalar = Dict(zip(scalar_to_multiindex, collect(1:length(scalar_to_multiindex))))
+    return scalar_to_multiindex, multiindex_to_scalar
 end
 
 function bernstein_3d_scalar_to_multiindex_lookup(N)
@@ -111,14 +142,13 @@ end
 TODO: currently, this only implements the 0-direction derivative"
 rewrites out to compute A x
 """
-function fast!(out::Vector{T}, A::Bernstein2DDerivativeMatrix{N, DIR}, x::Vector{T}) where {T, N, DIR}
-    Np = length(A.lookup)
-    for index in 1:Np
-        (i,j,k) = A.lookup[index]
-        coeff = i
-        if j >= 1 coeff += j end
-        if k >= 1 coeff += k end
-        out[index] = coeff * x[index]
+function fast!(out::Vector{Float64}, A::Bernstein2DDerivativeMatrix{N, DIR}, x::Vector{Float64}) where {N, DIR}
+    Np = length(A.scalar_to_multiindex)
+    out .= 0.0
+    for i in 1:Np
+        for (index, coeff) in A.multiplication_table[i]
+            out[i] += coeff * x[index]
+        end
     end
     return out
 end
@@ -142,14 +172,12 @@ end
     b_5 = similar(x_5)
     b_7 = similar(x_7)
 
-    @test mul!(b_3, evaluate_bernstein_derivative_matrices(Tri(), 3)[1], x_3) ≈ fast!(b_3, Bernstein2DDerivativeMatrix{3,0}(), x_3)
-    @test mul!(b_5, evaluate_bernstein_derivative_matrices(Tri(), 5)[2], x_5) ≈ fast!(b_5, Bernstein2DDerivativeMatrix{5,0}(), x_5)
-    @test mul!(b_7, evaluate_bernstein_derivative_matrices(Tri(), 7)[3], x_7) ≈ fast!(b_7, Bernstein2DDerivativeMatrix{7,0}(), x_7)
+    @test mul!(copy(b_3), evaluate_bernstein_derivative_matrices(Tri(), 3)[1], x_3) ≈ fast!(copy(b_3), Bernstein2DDerivativeMatrix{3,0}(), x_3)
+    @test mul!(copy(b_5), evaluate_bernstein_derivative_matrices(Tri(), 5)[1], x_5) ≈ fast!(copy(b_5), Bernstein2DDerivativeMatrix{5,0}(), x_5)
+    @test mul!(copy(b_7), evaluate_bernstein_derivative_matrices(Tri(), 7)[1], x_7) ≈ fast!(copy(b_7), Bernstein2DDerivativeMatrix{7,0}(), x_7)
 end
 
 "Benchmarks"
-
-"zero optimization, N = 3, N = 5, N = 7"
 
 function test(N)
     x_N = rand(Float64, div((N + 1) * (N + 2), 2))
@@ -164,4 +192,6 @@ end
 test(3)
 test(5)
 test(7)
+test(9)
 test(15)
+test(20)
