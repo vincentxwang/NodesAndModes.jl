@@ -22,13 +22,13 @@ The terms of the Bernstein basis are ordered dictionary-ordered by multiindex.
     - The index of the column.
     - The coefficient of the corresponding element.
     
-e.g. for a Bernstein basis derivative matrix with 3 rows, `multiplication_table` might look like this:
+e.g. To compute b = Ax, where A is a pretend Bernstein basis derivative matrix with 3 rows, `multiplication_table` might look like this:
 
 ```julia
 [
-    [(1, 2), (3, 1)], # Row 1: 2*x[1] + 1*x[3]
-    [(2, 1), (4, 3)], # Row 2: 1*x[2] + 3*x[4]
-    [(3, 4)]          # Row 3: 4*x[3]
+    [(1, 2), (3, 1)], # Row 1: b[1] = 2*x[1] + 1*x[3]
+    [(2, 1), (4, 3)], # Row 2: b[2] = 1*x[2] + 3*x[4]
+    [(3, 4)]          # Row 3: b[3] = 4*x[3]
 ]
 ```
 """
