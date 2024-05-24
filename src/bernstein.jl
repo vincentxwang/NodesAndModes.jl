@@ -81,9 +81,9 @@ end
 """
     cartesian_to_barycentric(::Union{Tri, Tet}, coords)
 
-Converts a matrix of cartesian coordinates into a matrix of barycentric coordinates.
+Converts a matrix of cartesian coordinates into a matrix of barycentric coordinates. 3 x num_points
 """
-function cartesian_to_barycentric(::Tri, coords)
+function cartesian_to_barycentric(::Tri, coords::AbstractMatrix)
     hcat([[(col[2] + 1) / 2, - (col[1] + col[2])/2, (col[1] + 1) / 2] for col in eachcol(coords)]...)
 end
 

@@ -1,0 +1,38 @@
+using BenchmarkTools
+
+function fast2!(out::Vector{Float64}, multiplication_table::Vector{Tuple{Int, Int, Int}}, x::Vector{Float64})
+    for (row, col, coeff) in multiplication_table
+        out[row] += coeff * x[col]
+    end
+    return out
+end
+
+
+"""
+out = Ax
+
+where A =
+
+0 7 0 5
+0 6 21 0
+0 0 3 0
+1 0 2 4
+"""
+
+multiplication_table = [
+    (1, 2,7), (1, 4,5), # (col, value)
+    (2, 2,6), (2, 3,21),
+    (3, 3,3),
+    (4, 1,1), (4, 3,2), (4,4,1),
+]
+
+x = [
+    10.0,
+    20.0,
+    30.0,
+    40.
+]
+
+out = similar(x)
+
+@btime fast2!($out, $multiplication_table, $x)

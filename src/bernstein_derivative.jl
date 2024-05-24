@@ -1,6 +1,8 @@
 using Test
 using LinearAlgebra
 using BenchmarkTools
+using MuladdMacro
+using StaticArrays
 
 """
     Bernstein2DDerivativeMatrix{N, DIR} <: AbstractArray{Int, 2}
@@ -35,7 +37,7 @@ e.g. To compute b = Ax, where A is a pretend Bernstein basis derivative matrix w
 struct Bernstein2DDerivativeMatrix{N, DIR} <: AbstractMatrix{Int}
     scalar_to_multiindex::Vector{Tuple{Int, Int, Int}}
     multiindex_to_scalar::Dict
-    multiplication_table::Vector{Vector{Tuple{Int, Int}}}
+    multiplication_table::Vector{Tuple{Int, Int, Int}}
 end
 
 function Bernstein2DDerivativeMatrix{N, DIR}() where {N, DIR}
@@ -43,10 +45,9 @@ function Bernstein2DDerivativeMatrix{N, DIR}() where {N, DIR}
     multiplication_table = []
     for index in 1:length(scalar_to_multiindex) #1:Np
         (i,j,k) = scalar_to_multiindex[index]
-        entries = [(index, i)]
-        if j >= 1 push!(entries, (multiindex_to_scalar[(i+1,j-1,k)], j)) end
-        if k >= 1 push!(entries, (multiindex_to_scalar[(i+1,j,k-1)], k)) end
-        push!(multiplication_table, entries)
+        push!(multiplication_table, (index, index, i))
+        if j >= 1 push!(multiplication_table, (index, multiindex_to_scalar[(i+1,j-1,k)], j)) end
+        if k >= 1 push!(multiplication_table, (index, multiindex_to_scalar[(i+1,j,k-1)], k)) end
     end
     return Bernstein2DDerivativeMatrix{N, DIR}(scalar_to_multiindex, multiindex_to_scalar, multiplication_table)
 end
@@ -143,12 +144,10 @@ TODO: currently, this only implements the 0-direction derivative"
 rewrites out to compute A x
 """
 function fast!(out::Vector{Float64}, A::Bernstein2DDerivativeMatrix{N, DIR}, x::Vector{Float64}) where {N, DIR}
-    Np = length(A.scalar_to_multiindex)
     out .= 0.0
-    for i in 1:Np
-        for (index, coeff) in A.multiplication_table[i]
-            out[i] += coeff * x[index]
-        end
+    for (i, index, coeff) in A.multiplication_table
+        # @inbounds out[i] = muladd(coeff, x[index], out[i])
+        out[i] += coeff * x[index]
     end
     return out
 end
@@ -195,3 +194,5 @@ test(7)
 test(9)
 test(15)
 test(20)
+
+@btime Bernstein2DDerivativeMatrix{7, 0}()
