@@ -1,9 +1,10 @@
 using Test
 using LinearAlgebra
 using BenchmarkTools
+using Muladd
 
 """
-    Bernstein2DDerivativeMatrix{N, DIR} <: AbstractArray{Int, 2}
+    Bernstein2DDerivativeMatrix{N, DIR} <: AbstractMatrix{Int}
 
 An `AbstractArray` subtype that represents the derivative matrix of the 2-dimensional degree N Bernstein basis.
 
@@ -50,9 +51,6 @@ function Bernstein2DDerivativeMatrix{N, DIR}() where {N, DIR}
     end
     return Bernstein2DDerivativeMatrix{N, DIR}(scalar_to_multiindex, multiindex_to_scalar, multiplication_table)
 end
-
-A = Bernstein2DDerivativeMatrix{3, 0}()
-A.multiplication_table
 
 function Base.size(::Bernstein2DDerivativeMatrix{N, DIR}) where {N, DIR}
     Np = div((N + 1) * (N + 2), 2)
@@ -147,7 +145,7 @@ function fast!(out::Vector{Float64}, A::Bernstein2DDerivativeMatrix{N, DIR}, x::
     out .= 0.0
     for i in 1:Np
         for (index, coeff) in A.multiplication_table[i]
-            out[i] += coeff * x[index]
+            @inbounds out[i] = muladd(coeff, x[index], out[i])
         end
     end
     return out
