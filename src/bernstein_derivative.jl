@@ -113,7 +113,7 @@ function fast!(out::Vector{Float64}, A::Bernstein2DDerivativeMatrix{N, DIR}, x::
     for j in 0:N 
         for i in 0:N-j
             k = N-i-j
-            val = out[row]
+            @inbounds val = out[row]
 
             # (i,j,k) term (diagonal)
             @inbounds muladd(i, x[row], val)
@@ -124,7 +124,7 @@ function fast!(out::Vector{Float64}, A::Bernstein2DDerivativeMatrix{N, DIR}, x::
             # (i+1,j,k-1) term
             @inbounds muladd(k, x[multiindex_to_linear(i+1, j, k-1)], val)        
 
-            out[row] = val
+            @inbounds out[row] = val
 
             row += 1
         end
