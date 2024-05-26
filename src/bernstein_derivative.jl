@@ -105,16 +105,30 @@ end
 TODO: currently, this only implements the 0-direction derivative"
 rewrites out to compute A x
 """
+ij_to_linear(i, j) = max(0, i + (0, 4, 7, 9)[j+1]) + 1
+multiindex_to_linear(i, j, k) = (min(i,j,k) < 0) ? 1 : ij_to_linear(i, j) # if any index is negative, the coeff = 0, so we just return 1
+
 function fast!(out::Vector{Float64}, A::Bernstein2DDerivativeMatrix{N, DIR}, x::Vector{Float64}) where {N, DIR}
-    Np = size(A)[1]
-    # Np = div((N + 1) * (N + 2), 2)
-    out .= 0.0
-    for i in 1:Np
-        for (index, coeff) in A.lil_matrix[i]
-            @inbounds out[i] = muladd(coeff, x[index], out[i])
+    row = 1
+    for j in 0:N 
+        for i in 0:N-j
+            k = N-i-j
+            val = out[row]
+
+            # (i,j,k) term (diagonal)
+            @inbounds muladd(i, x[row], val)
+
+            # (i+1,j-1,k) term
+            @inbounds muladd(j, x[multiindex_to_linear(i+1, j-1, k)], val)
+            
+            # (i+1,j,k-1) term
+            @inbounds muladd(k, x[multiindex_to_linear(i+1, j, k-1)], val)        
+
+            out[row] = val
+
+            row += 1
         end
     end
-    return out
 end
 
 
