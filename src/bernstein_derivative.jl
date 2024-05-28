@@ -169,7 +169,7 @@ function test(N)
     A = evaluate_bernstein_derivative_matrices(Tri(), N)[1]
     B = Bernstein2DDerivativeMatrix{N, 0}()
     offset = offsets(Tri(), N)
-    println("mul! vs fast!, N = ", N)
+    println("2D mul! vs fast!, N = ", N)
     @btime mul!($b_N, $A, $x_N)
     @btime fast!($b_N, $B, $x_N, $offset)
 end
