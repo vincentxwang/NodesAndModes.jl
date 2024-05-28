@@ -108,8 +108,8 @@ function offsets(::Tri, N::Integer)
     return tuple(tup...)
 end
 
-ij_to_linear(i, j, offset) = max(0, i + offset[j+1]) + 1
-multiindex_to_linear(i, j, k, offset) = (min(i,j,k) < 0) ? 1 : ij_to_linear(i, j, offset) # if any index is negative, the coeff = 0, so we just return 1
+ij_to_linear(i, j, offset) = @inbounds max(0, i + offset[j+1]) + 1
+multiindex_to_linear(i, j, k, offset) = @inbounds (min(i,j,k) < 0) ? 1 : ij_to_linear(i, j, offset) # if any index is negative, the coeff = 0, so we just return 1
 
 function fast!(out::Vector{Float64}, A::Bernstein2DDerivativeMatrix{N, DIR}, x::Vector{Float64}, offset) where {N, DIR}
     out .= 0.0
