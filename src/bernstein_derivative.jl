@@ -16,8 +16,6 @@ The terms of the Bernstein basis are ordered dictionary-ordered by multiindex.
 - `DIR::Integer`: Direction of derivative. Only `0,1,2` permissible with `(i,j,k)` directions respectively.
 
 # values
-- `scalar_to_multiindex::Vector{Tuple{Int, Int, Int}}`: Maps scalars to multiindex. 
-- `multiindex_to_scalar::Dict}`: Maps multiindex to scalars.
 - `lil_matrix::Vector{Vector{Tuple{Int, Int}}}`: Stores the matrix using a list-of-lists format, storing one list per row, with each entry containing a 
    tuple `(column index, value)`.
 """
@@ -90,49 +88,45 @@ end
 Returns a vector that maps scalar indices -> multi-indices.
 """
 function bernstein_2d_scalar_multiindex_lookup(N)
-    scalar_to_multiindex = [(i,j,k) for i in 0:N for j in 0:N for k in 0:N]
-    scalar_to_multiindex = filter(tup -> tup[1] + tup[2] + tup[3] == N, scalar_to_multiindex)
+    scalar_to_multiindex = [(i,j,N-i-j) for j in 0:N for i in 0:N-j]
     multiindex_to_scalar = Dict(zip(scalar_to_multiindex, collect(1:length(scalar_to_multiindex))))
     return scalar_to_multiindex, multiindex_to_scalar
 end
 
 function bernstein_3d_scalar_to_multiindex_lookup(N)
-    table = [(i,j,k,l) for i in 0:N for j in 0:N for k in 0:N for l in 0:N]
-    return filter(tup -> tup[1] + tup[2] + tup[3] + tup[4] == N, table)
+    return [(i,j,k,N-i-j) for k in 0:N for j in 0:N-k for i in 0:N-j-k]
 end
 
-"""
-TODO: currently, this only implements the 0-direction derivative"
-rewrites out to compute A x
-"""
-ij_to_linear(i, j) = max(0, i + (0, 4, 7, 9)[j+1]) + 1
-
-for j in 0:3
-    for i in 0:3-j
-        k = 3 - i - j
-        println("i: ", i, " j: ", j, " linear: ", ij_to_linear(i,j))
+function offsets(::Tri, N::Integer)
+    count = div((N + 1) * (N + 2), 2)
+    tup = []
+    for i in 1:(N+1)
+        count -= i
+        push!(tup, count)
     end
+    reverse!(tup)
+    return tuple(tup...)
 end
 
+ij_to_linear(i, j, offset) = max(0, i + offset[j+1]) + 1
+multiindex_to_linear(i, j, k, offset) = (min(i,j,k) < 0) ? 1 : ij_to_linear(i, j, offset) # if any index is negative, the coeff = 0, so we just return 1
 
-multiindex_to_linear(i, j, k) = (min(i,j,k) < 0) ? 1 : ij_to_linear(i, j) # if any index is negative, the coeff = 0, so we just return 1
-
-function fast!(out::Vector{Float64}, A::Bernstein2DDerivativeMatrix{N, DIR}, x::Vector{Float64}) where {N, DIR}
+function fast!(out::Vector{Float64}, A::Bernstein2DDerivativeMatrix{N, DIR}, x::Vector{Float64}, offset) where {N, DIR}
     out .= 0.0
     row = 1
-    for j in 0:N 
+    @inbounds for j in 0:N 
         for i in 0:N-j
             k = N-i-j
             # (i,j,k) term (diagonal)
-            @inbounds val = muladd(i, x[row], 0)
+            val = muladd(i, x[row], 0)
 
             # (i+1,j-1,k) term
-            @inbounds val = muladd(j, x[multiindex_to_linear(i+1, j-1, k)], val)
+            val = muladd(j, x[multiindex_to_linear(i+1, j-1, k, offset)], val)
             
             # (i+1,j,k-1) term
-            @inbounds val = muladd(k, x[multiindex_to_linear(i+1, j, k-1)], val)        
+            val = muladd(k, x[multiindex_to_linear(i+1, j, k-1, offset)], val)
 
-            @inbounds out[row] = val
+            out[row] = val
 
             row += 1
         end
@@ -162,23 +156,11 @@ end
     b_5 = similar(x_5)
     b_7 = similar(x_7)
 
-    @test mul!(copy(b_3), evaluate_bernstein_derivative_matrices(Tri(), 3)[1], x_3) ≈ fast!(copy(b_3), Bernstein2DDerivativeMatrix{3,0}(), x_3)
-    # @test mul!(copy(b_5), evaluate_bernstein_derivative_matrices(Tri(), 5)[1], x_5) ≈ fast!(copy(b_5), Bernstein2DDerivativeMatrix{5,0}(), x_5)
-    # @test mul!(copy(b_7), evaluate_bernstein_derivative_matrices(Tri(), 7)[1], x_7) ≈ fast!(copy(b_7), Bernstein2DDerivativeMatrix{7,0}(), x_7)
+    @test mul!(copy(b_3), evaluate_bernstein_derivative_matrices(Tri(), 3)[1], x_3) ≈ fast!(copy(b_3), Bernstein2DDerivativeMatrix{3,0}(), x_3, offsets(Tri(), 3))
+    @test mul!(copy(b_5), evaluate_bernstein_derivative_matrices(Tri(), 5)[1], x_5) ≈ fast!(copy(b_5), Bernstein2DDerivativeMatrix{5,0}(), x_5, offsets(Tri(), 5))
+    @test mul!(copy(b_7), evaluate_bernstein_derivative_matrices(Tri(), 7)[1], x_7) ≈ fast!(copy(b_7), Bernstein2DDerivativeMatrix{7,0}(), x_7, offsets(Tri(), 7))
 end
 
-x_3 = rand(Float64, div((3 + 1) * (3 + 2), 2))
-x_5 = rand(Float64, div((5 + 1) * (5 + 2), 2))
-x_7 = rand(Float64, div((7 + 1) * (7 + 2), 2))
-
-x_3
-
-b_3 = similar(x_3)
-b_5 = similar(x_5)
-b_7 = similar(x_7)
-
-mul!(copy(b_3), evaluate_bernstein_derivative_matrices(Tri(), 3)[1], x_3)
-fast!(copy(b_3), Bernstein2DDerivativeMatrix{3,0}(), x_3)
 "Benchmarks"
 
 function test(N)
@@ -186,9 +168,10 @@ function test(N)
     b_N = similar(x_N)
     A = evaluate_bernstein_derivative_matrices(Tri(), N)[1]
     B = Bernstein2DDerivativeMatrix{N, 0}()
+    offset = offsets(Tri(), N)
     println("mul! vs fast!, N = ", N)
     @btime mul!($b_N, $A, $x_N)
-    @btime fast!($b_N, $B, $x_N)
+    @btime fast!($b_N, $B, $x_N, $offset)
 end
 
 test(3)
