@@ -5,21 +5,51 @@ using NodesAndModes
 using MuladdMacro
 
 """
-    Bernstein2DDerivativeMatrix{N, DIR} <: AbstractMatrix{Int}
+TODO:
+1) optimize 2D multiplication with unrolling?
+2) implement 3D matrices
+"""
+
+"""
+    BernsteinDerivativeMatrix{ELEM, N, DIR} <: AbstractMatrix{Int}
 
 An `AbstractArray` subtype that represents the derivative matrix of the 2-dimensional degree N Bernstein basis.
 
-The terms of the Bernstein basis are ordered dictionary-ordered by multiindex.
+The terms of the Bernstein basis are ordered by reverse-dictionary order by all terms in the multiindex excluding the last term.
 
 # Type Parameters
+- `ELEM::Union{Tri, Tet}`: Tri -> 2D, Tet -> 3D
 - `N::Int`: Bernstein basis degree
-- `DIR::Integer`: Direction of derivative. Only `0,1,2` permissible with `(i,j,k)` directions respectively.
-
-# values
+- `DIR::Int`: Direction of derivative. Only `0,1,2` permissible with `(i,j,k)` directions respectively for 2D, 
+and similarly 0..3 for 3D
 """
-struct BernsteinDerivativeMatrices{N} end
-
 struct BernsteinDerivativeMatrix{ELEM, N, DIR} <: AbstractMatrix{Int} end
+
+"Container for matrices in all directions"
+struct BernsteinDerivativeMatrices{ELEM, N}
+    matrices::Tuple{Vararg{BernsteinDerivativeMatrix{ELEM, N, Int}}}
+end
+
+function create_derivative_matrices(::Type{Tri}, N::Int)
+    return BernsteinDerivativeMatrices{Tri, N}(
+        (
+            BernsteinDerivativeMatrix{Tri, N, 0}(),
+            BernsteinDerivativeMatrix{Tri, N, 1}(),
+            BernsteinDerivativeMatrix{Tri, N, 2}()
+        )
+    )
+end
+
+function create_derivative_matrices(::Type{Tet}, N::Int)
+    return BernsteinDerivativeMatrices{Tet, N}(
+        (
+            BernsteinDerivativeMatrix{Tet, N, 0}(),
+            BernsteinDerivativeMatrix{Tet, N, 1}(),
+            BernsteinDerivativeMatrix{Tet, N, 2}(),
+            BernsteinDerivativeMatrix{Tet, N, 3}()
+        )
+    )
+end
 
 function Base.size(::BernsteinDerivativeMatrix{ELEM, N, DIR}) where {ELEM<:Tri, N, DIR}
     Np = div((N + 1) * (N + 2), 2)
@@ -57,6 +87,8 @@ end
 function bernstein_3d_scalar_to_multiindex_lookup(N)
     return [(i,j,k,N-i-j) for k in 0:N for j in 0:N-k for i in 0:N-j-k]
 end
+
+"Multiplication algorithm"
 
 function offsets(::Tri, N::Integer)
     count = div((N + 1) * (N + 2), 2)
@@ -126,6 +158,8 @@ function fast!(out::Vector{Float64}, ::BernsteinDerivativeMatrix{ELEM, N, 2}, x:
     end
     return out
 end
+
+"Tests"
 
 @testset "2D Bernstein derivative verification" begin
     @test evaluate_bernstein_derivative_matrices(Tri(), 3)[1] ≈ BernsteinDerivativeMatrix{Tri,3,0}()

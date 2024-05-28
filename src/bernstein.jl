@@ -5,8 +5,10 @@ using NodesAndModes
 
 Returns a Np x Np matrix V, where V_mn = the n-th Bernstein basis evaluated at the m-th point, followed by its derivative matrices.
 
-Use `::Tri` for 2D and `::Tet` for 3D. We order the Bernstein basis according to exponents in dictonary order. Does not work for N > 20
-because of `factorial()` limitations.
+Use `::Tri` for 2D and `::Tet` for 3D. We order the Bernstein basis according to exponents in a "reverse-dictionary" order of the first DIM-1
+coordinates.
+
+Does not work for N > 20 because of `factorial()` limitations.
 
 # Arguments
 - `N::Int`: Bernstein basis degree
@@ -81,7 +83,7 @@ end
 """
     cartesian_to_barycentric(::Union{Tri, Tet}, coords)
 
-Converts a matrix of cartesian coordinates into a matrix of barycentric coordinates.
+Converts a 3 x Np matrix of cartesian coordinates into a matrix of barycentric coordinates.
 """
 function cartesian_to_barycentric(::Tri, coords)
     hcat([[(col[2] + 1) / 2, - (col[1] + col[2])/2, (col[1] + 1) / 2] for col in eachcol(coords)]...)
@@ -107,7 +109,7 @@ function evaluate_bernstein_derivative_matrices(::Tet, N)
     return round.(Int, V \ Vi), round.(Int, V \ Vj), round.(Int, V \ Vk), round.(Int, V \ Vl)
 end
 
-evaluate_bernstein_derivative_matrices(Tri(), 7)[1]
-evaluate_bernstein_derivative_matrices(Tet(), 7)[1]
+# evaluate_bernstein_derivative_matrices(Tri(), 7)[1]
+# evaluate_bernstein_derivative_matrices(Tet(), 7)[1]
 
 
