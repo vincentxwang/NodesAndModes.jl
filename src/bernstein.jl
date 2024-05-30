@@ -5,28 +5,30 @@ using NodesAndModes
 
 Returns a Np x Np matrix V, where V_mn = the n-th Bernstein basis evaluated at the m-th point, followed by its derivative matrices.
 
-Use `::Tri` for 2D and `::Tet` for 3D. We order the Bernstein basis according to exponents in dictonary order. Does not work for N > 20
-because of `factorial()` limitations.
+Use `::Tri` for 2D and `::Tet` for 3D. We order the Bernstein basis according to exponents in a "reverse-dictionary" order of the first DIM-1
+coordinates.
+
+Does not work for N > 20 because of `factorial()` limitations.
 
 # Arguments
 - `N::Int`: Bernstein basis degree
 - `r,s,t::AbstractArray{T,1}`: Np-sized vectors of distinct 2D barycentric coordinates to be used as interpolatory points
 """
 function bernstein_basis(::Tri, N, r, s, t)
-    V =  hcat(@. [(factorial(N)/(factorial(i) * factorial(j) * factorial(N - i - j))) * r^i * s^j * t^(N - i - j) for i in 0:N for j in 0:N-i]...)
-    Vi = hcat([evaluate_bernstein_derivatives(Tri(), N, r, s, t, i, j, N - i - j)[1] for i in 0:N for j in 0:N-i]...)
-    Vj = hcat([evaluate_bernstein_derivatives(Tri(), N, r, s, t, i, j, N - i - j)[2] for i in 0:N for j in 0:N-i]...)
-    Vk = hcat([evaluate_bernstein_derivatives(Tri(), N, r, s, t, i, j, N - i - j)[3] for i in 0:N for j in 0:N-i]...)
+    V =  hcat(@. [(factorial(N)/(factorial(i) * factorial(j) * factorial(N - i - j))) * r^i * s^j * t^(N - i - j) for j in 0:N for i in 0:N-j]...)
+    Vi = hcat([evaluate_bernstein_derivatives(Tri(), N, r, s, t, i, j, N - i - j)[1] for j in 0:N for i in 0:N-j]...)
+    Vj = hcat([evaluate_bernstein_derivatives(Tri(), N, r, s, t, i, j, N - i - j)[2] for j in 0:N for i in 0:N-j]...)
+    Vk = hcat([evaluate_bernstein_derivatives(Tri(), N, r, s, t, i, j, N - i - j)[3] for j in 0:N for i in 0:N-j]...)
     return V, Vi, Vj, Vk
 end
 
 function bernstein_basis(::Tet, N, r, s, t, u)
     V = hcat(@. [(factorial(N)/(factorial(i) * factorial(j) * factorial(k) * factorial(N - i - j - k))) *
-        r^i * s^j * t^k * u^(N - i - j - k) for i in 0:N for j in 0:N-i for k in 0:N-i-j]...)
-    Vi = hcat([evaluate_bernstein_derivatives(Tet(), N, r, s, t, u, i, j, k, N - i - j - k)[1] for i in 0:N for j in 0:N-i for k in 0:N-i-j]...)
-    Vj = hcat([evaluate_bernstein_derivatives(Tet(), N, r, s, t, u, i, j, k, N - i - j - k)[2] for i in 0:N for j in 0:N-i for k in 0:N-i-j]...)
-    Vk = hcat([evaluate_bernstein_derivatives(Tet(), N, r, s, t, u, i, j, k, N - i - j - k)[3] for i in 0:N for j in 0:N-i for k in 0:N-i-j]...)
-    Vl = hcat([evaluate_bernstein_derivatives(Tet(), N, r, s, t, u, i, j, k, N - i - j - k)[4] for i in 0:N for j in 0:N-i for k in 0:N-i-j]...)
+        r^i * s^j * t^k * u^(N - i - j - k) for k in 0:N for j in 0:N-k for i in 0:N-j-k]...)
+    Vi = hcat([evaluate_bernstein_derivatives(Tet(), N, r, s, t, u, i, j, k, N - i - j - k)[1] for k in 0:N for j in 0:N-k for i in 0:N-j-k]...)
+    Vj = hcat([evaluate_bernstein_derivatives(Tet(), N, r, s, t, u, i, j, k, N - i - j - k)[2] for k in 0:N for j in 0:N-k for i in 0:N-j-k]...)
+    Vk = hcat([evaluate_bernstein_derivatives(Tet(), N, r, s, t, u, i, j, k, N - i - j - k)[3] for k in 0:N for j in 0:N-k for i in 0:N-j-k]...)
+    Vl = hcat([evaluate_bernstein_derivatives(Tet(), N, r, s, t, u, i, j, k, N - i - j - k)[4] for k in 0:N for j in 0:N-k for i in 0:N-j-k]...)
     return V, Vi, Vj, Vk, Vl
 end
  
@@ -81,7 +83,7 @@ end
 """
     cartesian_to_barycentric(::Union{Tri, Tet}, coords)
 
-Converts a matrix of cartesian coordinates into a matrix of barycentric coordinates.
+Converts a 3 x Np matrix of cartesian coordinates into a matrix of barycentric coordinates.
 """
 function cartesian_to_barycentric(::Tri, coords)
     hcat([[(col[2] + 1) / 2, - (col[1] + col[2])/2, (col[1] + 1) / 2] for col in eachcol(coords)]...)
@@ -107,7 +109,7 @@ function evaluate_bernstein_derivative_matrices(::Tet, N)
     return round.(Int, V \ Vi), round.(Int, V \ Vj), round.(Int, V \ Vk), round.(Int, V \ Vl)
 end
 
-evaluate_bernstein_derivative_matrices(Tri(), 7)[1]
-evaluate_bernstein_derivative_matrices(Tet(), 7)[1]
+# evaluate_bernstein_derivative_matrices(Tri(), 7)[1]
+# evaluate_bernstein_derivative_matrices(Tet(), 7)[1]
 
 
