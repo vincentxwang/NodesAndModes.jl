@@ -97,7 +97,7 @@ function evaluate_bernstein_derivatives(::Tri, N, r, s, t, i, j, k)
     return vi, vj, vk
 end
 
-N = 3
+N = 5
 rd = RefElemData(Tet(), N)
 # LIFT: quad points on faces -> polynomial in volume
 # ---> define Vq: polynomials on faces -> quad points on faces
@@ -131,6 +131,7 @@ using SparseArrays
 bernstein_LIFT = MB \ MBf # bernstein_to_nodal_volume \ (nodal_LIFT * bernstein_to_nodal_face)
 bernstein_LIFT = Matrix(droptol!(sparse(bernstein_LIFT), length(bernstein_LIFT) * eps()))
 
+bernstein_LIFT
 spy(bernstein_LIFT)
 # comparing the two to make sure the difference is small
 using Test

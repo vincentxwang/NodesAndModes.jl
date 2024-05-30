@@ -2,6 +2,7 @@ using NodesAndModes
 using Plots
 using LinearAlgebra
 using Test
+using BenchmarkTools
 # Degree elevation operator E^N_{N-1}
 struct ElevationMatrix{N} <: AbstractMatrix{Float64} end
 
@@ -40,9 +41,6 @@ end
 
 ElevationMatrix{7}()
 
-L0 = 25/2 * transpose(ElevationMatrix{5}()) * ElevationMatrix{5}()
-spy(L0)
-
 function lift(N)
     L0 = (N + 1)^2/2 * transpose(ElevationMatrix{N+1}()) * ElevationMatrix{N+1}()
     Lf = L0
@@ -50,8 +48,45 @@ function lift(N)
     for i in 1:N
         E = E * ElevationMatrix{N+1-i}() 
         Lf = vcat(Lf, (-1)^i * binomial(N, i) / (1 + i) * transpose(E) * L0)
-    end        
+    end
     return Lf
 end
 
-spy(lift(3))
+struct LiftMatrix{N, DIR} <: AbstractMatrix{Float64} 
+    Lf::Matrix{Float64}
+end
+
+LiftMatrix{N, DIR}() where {N, DIR} = LiftMatrix{N, DIR}(lift(N))
+
+function Base.size(::LiftMatrix{N, DIR}) where {N, DIR}
+    return (div((N + 1) * (N + 2) * (N + 3), 6), div((N + 1) * (N + 2), 2))
+end
+
+function Base.getindex(L::LiftMatrix{N, 3}, m, n) where {N}
+    return L.Lf[m, n]
+end
+
+@inline function ijk_to_linear(i, j, k) 
+    # @fastmath j_offset = (j==0) ? 0 : (0, 4, 7, 9)[j+1] - k # N = 3
+    # return @fastmath i + j_offset + (0, 10, 16, 19)[k+1] + 1
+    @fastmath j_offset = (j==0) ? 0 : (0, 8, 15, 21, 26, 30, 33, 35)[j+1] - k # # N = 7
+    return @fastmath i + j_offset + (0, 36, 64, 85, 100, 110, 116, 119)[k+1] + 1
+end
+
+L = lift(7)
+
+N = 7
+mat = Matrix{Float64}(undef, 0, div((N + 1) * (N + 2), 2))
+transpose(L[ijk_to_linear(7,0,0),:])
+for l in 0:N
+    for k in 0:N-l
+        for j in 0:N-l-k
+            i = N-l-k-j
+            mat = vcat(mat, L[ijk_to_linear(i,j,k),:])
+        end
+    end
+end
+
+LiftMatrix{7,3}()
+
+@btime lift(7)
