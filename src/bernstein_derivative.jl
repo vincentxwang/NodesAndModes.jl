@@ -102,7 +102,7 @@ function offsets(::Tri, N::Integer)
 end
 
 ij_to_linear(i, j, offset) = @inbounds max(0, i + offset[j+1]) + 1
-multiindex_to_linear(i, j, k, offset) = @inbounds (min(i,j,k) < 0) ? 1 : ij_to_linear(i, j, offset) # if any index is negative, the coeff = 0, so we just return 1
+multiindex_to_linear(i, j, k, offset) = @inbounds (min(i,j,k) < 0) ? 0 : ij_to_linear(i, j, offset) # if any index is negative, the coeff = 0, so we just return 1
 
 function fast!(out::Vector{Float64}, ::BernsteinDerivativeMatrix{ELEM, N, 0}, x::Vector{Float64}, offset) where {ELEM<:Tri, N}
     out .= 0.0
@@ -144,7 +144,6 @@ function fast!(out::Vector{Float64}, ::BernsteinDerivativeMatrix{ELEM, N, 1}, x:
 end
 
 function fast!(out::Vector{Float64}, ::BernsteinDerivativeMatrix{ELEM, N, 2}, x::Vector{Float64}, offset) where {ELEM<:Tri, N}
-    out .= 0.0
     row = 1
     @inbounds for j in 0:N 
         for i in 0:N-j
