@@ -6,24 +6,24 @@ using MuladdMacro
 using Plots
 
 """
-    Bernstein2DDerivativeMatrix_2D_r{N} <: AbstractMatrix{Number}
+    BernsteinDerivativeMatrix_2D_r{N} <: AbstractMatrix{Number}
 
-    Subtype of `AbstractMatrix{Number}` used to compute derivatives with respect to the first Cartesian coordinate r in the Bernstein basis.
+    Subtype of `AbstractMatrix{Number}` used to compute derivatives with respect to the first Cartesian coordinate r in the 2D Bernstein basis.
 
     Bernstein polynomials are linearly ordered by reverse-dictionary order of the first two (of three) barycentric coordinates.
 
     # Parameters
     - `N`: Order of Bernstein polynomials
 """
-struct Bernstein2DDerivativeMatrix_2D_r{N} <: AbstractMatrix{Number} end
-struct Bernstein2DDerivativeMatrix_2D_s{N} <: AbstractMatrix{Number} end
+struct BernsteinDerivativeMatrix_2D_r{N} <: AbstractMatrix{Number} end
+struct BernsteinDerivativeMatrix_2D_s{N} <: AbstractMatrix{Number} end
 
-function Base.size(::Bernstein2DDerivativeMatrix_2D_r{N}) where {N}
+function Base.size(::BernsteinDerivativeMatrix_2D_r{N}) where {N}
     Np = div((N + 1) * (N + 2), 2)
     return (Np, Np)
 end
 
-Base.size(::Bernstein2DDerivativeMatrix_2D_s{N}) where {N} = size(Bernstein2DDerivativeMatrix_2D_r{N}())
+Base.size(::BernsteinDerivativeMatrix_2D_s{N}) where {N} = size(BernsteinDerivativeMatrix_2D_r{N}())
 
 function offsets(N::Integer)
     tup = [0]
@@ -58,7 +58,7 @@ function linear_to_ijk_lookup(N)
     return [(i,j,N-i-j) for j in 0:N for i in 0:N-j]
 end
 
-function Base.getindex(::Bernstein2DDerivativeMatrix_2D_r{N}, m, n) where {N}
+function Base.getindex(::BernsteinDerivativeMatrix_2D_r{N}, m, n) where {N}
     linear_to_ijk = linear_to_ijk_lookup(N)
     (i1, j1, k1) = linear_to_ijk[m]
     (i2, j2, k2) = linear_to_ijk[n]
@@ -66,7 +66,7 @@ function Base.getindex(::Bernstein2DDerivativeMatrix_2D_r{N}, m, n) where {N}
     return 0.5 * (get_coeff(i1,j1,k1,i2,j2,k2) - get_coeff(k1,j1,i1,k2,j2,i2))
 end
 
-function Base.getindex(::Bernstein2DDerivativeMatrix_2D_s{N}, m, n) where {N}
+function Base.getindex(::BernsteinDerivativeMatrix_2D_s{N}, m, n) where {N}
     linear_to_ijk = linear_to_ijk_lookup(N)
     (i1, j1, k1) = linear_to_ijk[m]
     (i2, j2, k2) = linear_to_ijk[n]
@@ -74,9 +74,8 @@ function Base.getindex(::Bernstein2DDerivativeMatrix_2D_s{N}, m, n) where {N}
     return 0.5 * (get_coeff(j1,i1,k1,j2,i2,k2) - get_coeff(k1,j1,i1,k2,j2,i2))
 end
 
-function fast!(out, ::Bernstein2DDerivativeMatrix_2D_r{N}, x) where {N}
+function fast!(out, ::BernsteinDerivativeMatrix_2D_r{N}, x, offset) where {N}
     row = 1
-    offset = offsets(N)
     @inbounds for j in 0:N
         for i in 0:N-j
             k = N-i-j
@@ -105,9 +104,8 @@ function fast!(out, ::Bernstein2DDerivativeMatrix_2D_r{N}, x) where {N}
     return out
 end
 
-function fast!(out, ::Bernstein2DDerivativeMatrix_2D_s{N}, x) where {N}
+function fast!(out, ::BernsteinDerivativeMatrix_2D_s{N}, x, offset) where {N}
     row = 1
-    offset = offsets(N)
     @inbounds for j in 0:N
         for i in 0:N-j
             k = N-i-j
@@ -142,18 +140,18 @@ load bernstein_derivative.jl and bernstein.jl first
 """
  
 @testset "r/s matricies vs. i/j/k matrices" begin
-    @test Bernstein2DDerivativeMatrix_2D_r{5}() ≈ 0.5 * ((BernsteinDerivativeMatrix{Tri, 5, 0}() -  BernsteinDerivativeMatrix{Tri, 5, 2}()))
-    @test Bernstein2DDerivativeMatrix_2D_s{5}() ≈ 0.5 * ((BernsteinDerivativeMatrix{Tri, 5, 1}() -  BernsteinDerivativeMatrix{Tri, 5, 2}()))
+    @test BernsteinDerivativeMatrix_2D_r{5}() ≈ 0.5 * ((BernsteinDerivativeMatrix{Tri, 5, 0}() -  BernsteinDerivativeMatrix{Tri, 5, 2}()))
+    @test BernsteinDerivativeMatrix_2D_s{5}() ≈ 0.5 * ((BernsteinDerivativeMatrix{Tri, 5, 1}() -  BernsteinDerivativeMatrix{Tri, 5, 2}()))
 
     x_7 = rand(Float64, div((7 + 1) * (7 + 2), 2))
     b_7 = similar(x_7)
-    @test 0.5 * (mul!(copy(b_7), evaluate_bernstein_derivative_matrices(Tri(), 7)[1], x_7) - mul!(copy(b_7), evaluate_bernstein_derivative_matrices(Tri(), 7)[3], x_7)) ≈ fast!(copy(b_7), Bernstein2DDerivativeMatrix_2D_r{7}(), x_7)
-    @test 0.5 * (mul!(copy(b_7), evaluate_bernstein_derivative_matrices(Tri(), 7)[2], x_7) - mul!(copy(b_7), evaluate_bernstein_derivative_matrices(Tri(), 7)[3], x_7)) ≈ fast!(copy(b_7), Bernstein2DDerivativeMatrix_2D_s{7}(), x_7)
+    @test 0.5 * (mul!(copy(b_7), evaluate_bernstein_derivative_matrices(Tri(), 7)[1], x_7) - mul!(copy(b_7), evaluate_bernstein_derivative_matrices(Tri(), 7)[3], x_7)) ≈ fast!(copy(b_7), BernsteinDerivativeMatrix_2D_r{7}(), x_7)
+    @test 0.5 * (mul!(copy(b_7), evaluate_bernstein_derivative_matrices(Tri(), 7)[2], x_7) - mul!(copy(b_7), evaluate_bernstein_derivative_matrices(Tri(), 7)[3], x_7)) ≈ fast!(copy(b_7), BernsteinDerivativeMatrix_2D_s{7}(), x_7)
 end
 
-@btime fast!(copy(b_7), Bernstein2DDerivativeMatrix_2D_r{7}(), x_7)
+@btime fast!($(copy(b_7)), $(BernsteinDerivativeMatrix_2D_r{7}()), $x_7, $(offsets(7)))
 
-spy(Bernstein2DDerivativeMatrix_2D_r{5}()) 
+spy(BernsteinDerivativeMatrix_2D_r{5}()) 
 
 
 
