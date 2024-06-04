@@ -185,24 +185,44 @@ N=7
 L0 = (N + 1)^2/2 * transpose(ElevationMatrix{N+1}()) * ElevationMatrix{N+1}()
 spy(L0)
 
-function fast!(out, ::ElevationMatrix{N}, x, L0) where {N}
+offset_table = [offsets(Tri(), i) for i in 1:20]
+
+offse = offset_table
+
+function fast!(out, ::ElevationMatrix{N}, x, L0, offse) where {N}
     index1 = div((N + 1) *(N + 2), 2)
-    @inbounds out[1:index1] = L0 * x
-    E = transpose(ElevationMatrix{N}()) * L0 * x
-    @inbounds for j in 1:N
-        index2 = index1 + div((N + 1 - j) * (N + 2 - j), 2)
-        out[(index1 + 1): index2] = @fastmath ((isodd(j) ? -1 : 1) * binomial(N, j) / (1 + j)) * E
+    L0x = L0 * x
+    out[1:index1] = L0x
+    E = fast!(zeros(div((N) * (N+1), 2)), ReductionMatrix{N}(), L0x, offse[N])
+    for j in 1:(N-1)
+        diff = div((N + 1 - j) * (N + 2 - j), 2)
+        index2 = index1 + diff
+        out[(index1 + 1): index2] = @fastmath ((isodd(j) ? -1 : 1) * binomial(N, j) / (1 + j)) * E[1:diff]
         index1 = index2
-        E = transpose(ElevationMatrix{N-j}()) * E
+        fast!(E, ReductionMatrix{N-j}(), E, offse[N-j])
+        # opportunity for further optimization: can derive offset[N-1] from offset[N]..!
     end
     return out
 end
+
+7 * 8 / 2
+
+@btime offsets(Tri(), 7)
 out = zeros(Float64, 120)
+
 
 @btime $(L0) * $(x)
 println("fast! vs lift(7) * x")
-@btime fast!($(out), $(ElevationMatrix{7}()), $(x), $(L0))
+@btime fast!($(out), $(ElevationMatrix{7}()), $(x), $(L0), $(offset_table))
 @btime $(lift(7)) * $(x)
+
+
+fast!(out, ElevationMatrix{7}(), x, L0, offset_table)
+lift(7) * x
+
+@btime lift(7)
+
+@test fast!(out, ElevationMatrix{7}(), x, L0) ≈ lift(7) * x
 
 ElevationMatrix{7}()
 
