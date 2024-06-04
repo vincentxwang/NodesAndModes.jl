@@ -3,11 +3,33 @@ using Plots
 using LinearAlgebra
 using Test
 using BenchmarkTools
+using SparseArrays
+
 # Degree elevation operator E^N_{N-1}
 struct ElevationMatrix{N} <: AbstractMatrix{Float64} end
 
 function Base.size(::ElevationMatrix{N}) where {N}
     return (div((N + 1) * (N + 2), 2), div(N * (N + 1), 2))
+end
+
+function fast!(out, ::ElevationMatrix{N}, x, offset) where {N}
+    row = 1
+    @inbounds for j in 0:N
+        for i in 0:N-j
+            k = N-i-j
+            val = muladd(i/N, x[multiindex_to_linear(i-1, j, k, offset)], 0.0)
+            val = muladd(j/N, x[multiindex_to_linear(i, j-1, k, offset)], val)
+            val = muladd(k/N, x[multiindex_to_linear(i, j, k-1, offset)], val)
+
+            # val = 0
+            # val += i/N * x[multiindex_to_linear(i-1, j, k, offsets2)]
+            # val += j/N * x[multiindex_to_linear(i, j-1, k, offsets2)]
+            # val += k/N * x[multiindex_to_linear(i, j, k-1, offsets2)]
+            out[row] = val # not sure why putting / N above is faster?
+            row += 1
+        end
+    end
+    return out
 end
 
 function offsets(::Tri, N::Integer)
@@ -36,10 +58,11 @@ function Base.getindex(::ElevationMatrix{N}, m, n) where {N}
     if ((i1, j1, k1) == (i2 + 1,j2,k2)) return (i2 + 1)/N
     elseif ((i1, j1, k1) == (i2,j2 + 1,k2)) return (j2 + 1)/N
     elseif ((i1, j1, k1) == (i2,j2,k2 + 1)) return (k2 + 1)/N
-    else return 0 end
+    else return 0.0 end
 end
 
-ElevationMatrix{7}()
+
+@btime ElevationMatrix{7}()
 
 function lift(N)
     L0 = (N + 1)^2/2 * transpose(ElevationMatrix{N+1}()) * ElevationMatrix{N+1}()
@@ -92,24 +115,66 @@ end
 L = lift(4)
 spy(L)
 
-N = 7
-mat = Matrix{Float64}(undef, 0, div((N + 1) * (N + 2), 2))
-transpose(L[ijk_to_linear(7,0,0, tri_offsets(N), tet_offsets(N)),:])
-for k in 0:N
-    for j in 0:N-k
-        for i in 0:N-k-j
-            l = N-i-j-k
-            mat = vcat(mat, transpose(L[ijk_to_linear(i,k,j, tri_offsets(N), tet_offsets(N)),:]))
-        end
-    end
+# N = 7
+# mat = Matrix{Float64}(undef, 0, div((N + 1) * (N + 2), 2))
+# transpose(L[ijk_to_linear(7,0,0, tri_offsets(N), tet_offsets(N)),:])
+# for k in 0:N
+#     for j in 0:N-k
+#         for i in 0:N-k-j
+#             l = N-i-j-k
+#             mat = vcat(mat, transpose(L[ijk_to_linear(i,k,j, tri_offsets(N), tet_offsets(N)),:]))
+#         end
+#     end
+# end
+
+
+# spy(mat, markersize = 5)
+# LiftMatrix{7,3}()
+
+# lift(7)
+# @btime lift(7)
+
+struct ReductionMatrix{N} <: AbstractMatrix{Float64} end
+
+function Base.size(::ReductionMatrix{N}) where {N}
+    return (div(N * (N + 1), 2), div((N + 1) * (N + 2), 2))
 end
 
+function Base.getindex(::ReductionMatrix{N}, m, n) where {N}
+    return ElevationMatrix{N}()[n, m]
+end
 
-spy(mat, markersize = 5)
-LiftMatrix{7,3}()
+ReductionMatrix{6}()
+ElevationMatrix{6}()
+@test ReductionMatrix{6}() ≈ transpose(ElevationMatrix{6}())
 
-lift(7)
-@btime lift(7)
+# pass in offsets(N).
+function fast!(out, ::ReductionMatrix{N}, x, offset) where {N}
+    row = 1
+    for j in 0:N-1
+        for i in 0:N-1-j
+            k = N-1-i-j
+            val = muladd((i+1)/N, x[multiindex_to_linear(i+1, j, k, offset)], 0.0)
+            val = muladd((j+1)/N, x[multiindex_to_linear(i, j+1, k, offset)], val)
+            val = muladd((k+1)/N, x[multiindex_to_linear(i, j, k+1, offset)], val)
+
+            # val = 0
+            # val += i/N * x[multiindex_to_linear(i-1, j, k, offsets2)]
+            # val += j/N * x[multiindex_to_linear(i, j-1, k, offsets2)]
+            # val += k/N * x[multiindex_to_linear(i, j, k-1, offsets2)]
+            out[row] = val # not sure why putting / N above is faster?
+            row += 1
+        end
+    end
+    return out
+end
+
+x = rand(Float64, 36)
+
+@test fast!(zeros(28), ReductionMatrix{7}(), x, offsets(Tri(), 7)) ≈ transpose(transpose(x) * ElevationMatrix{7}())
+
+
+
 
 """ Multiplication """
 
@@ -118,12 +183,14 @@ x = rand(Float64, 36)
 
 N=7
 L0 = (N + 1)^2/2 * transpose(ElevationMatrix{N+1}()) * ElevationMatrix{N+1}()
+spy(L0)
+
 function fast!(out, ::ElevationMatrix{N}, x, L0) where {N}
     index1 = div((N + 1) *(N + 2), 2)
     @inbounds out[1:index1] = L0 * x
     E = transpose(ElevationMatrix{N}()) * L0 * x
     @inbounds for j in 1:N
-        index2 = index1 + div((N + 1 - j) *(N + 2 - j), 2)
+        index2 = index1 + div((N + 1 - j) * (N + 2 - j), 2)
         out[(index1 + 1): index2] = @fastmath ((isodd(j) ? -1 : 1) * binomial(N, j) / (1 + j)) * E
         index1 = index2
         E = transpose(ElevationMatrix{N-j}()) * E
@@ -132,9 +199,12 @@ function fast!(out, ::ElevationMatrix{N}, x, L0) where {N}
 end
 out = zeros(Float64, 120)
 
+@btime $(L0) * $(x)
 println("fast! vs lift(7) * x")
 @btime fast!($(out), $(ElevationMatrix{7}()), $(x), $(L0))
 @btime $(lift(7)) * $(x)
+
+ElevationMatrix{7}()
 
 fast!(out, ElevationMatrix{7}(), x, L0)[37]
 
