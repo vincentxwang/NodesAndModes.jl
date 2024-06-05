@@ -6,7 +6,7 @@ using BenchmarkTools
 using SparseArrays
 using Profile
 using StaticArrays
-
+using LoopVectorization
 """ElevationMatrix{N}()"""
 struct ElevationMatrix{N} <: AbstractMatrix{Float64} end
 
@@ -139,20 +139,24 @@ multiplies x by the reduction matrix: N -> N - 1
 
 pass in offsets(Tri(), N)
 """
+ij_to_linear(i,j,offset) = i + offset[j+1] + 1 
+
 function reduction_multiply!(out, N, x, offset)
     row = 1
-    for j in 0:N-1
+    @inbounds for j in 0:N-1
         for i in 0:N-1-j
             k = N-1-i-j
-            val = muladd((i+1)/N, x[multiindex_to_linear(i+1, j, k, offset)], 0.0)
-            val = muladd((j+1)/N, x[multiindex_to_linear(i, j+1, k, offset)], val)
-            val = muladd((k+1)/N, x[multiindex_to_linear(i, j, k+1, offset)], val)
-            out[row] = val # not sure why putting / N above is faster?
+            val = muladd((i+1), x[ij_to_linear(i+1, j, offset)], 0)
+            val = muladd((j+1), x[ij_to_linear(i, j+1, offset)], val)
+            val = muladd((k+1), x[ij_to_linear(i, j, offset)], val) # k + 1
+            out[row] = val/N # not sure why putting / N above is faster?
             row += 1
         end
     end
-    return out
+    return out 
 end
+
+@btime 3/7
 
 x = rand(Float64, 36)
 
@@ -171,20 +175,22 @@ function fast!(out, N, L0, x, offset, l_j)
     E = L0 * x
     index1 = div((N + 1) * (N + 2), 2)
     out[1:index1] = E
-    E = reduction_multiply!(E, N, E, offset[N])
+    reduction_multiply!(E, N, E, offset[N])
     @inbounds for j in 1:N
         diff = div((N + 1 - j) * (N + 2 - j), 2)
         index2 = index1 + diff
         # assign the next (N+1-j)(N+2-j)/2 entries as l_j * (E^N_{N_j})^T u^f
         out[(index1 + 1): index2] .= l_j[j] .* @view E[1:diff]
-        index1 = index2
         if j < N
+            index1 = index2
             reduction_multiply!(E, N-j, E, offset[N-j])
         end
         # opportunity for further (small) (optimization?): can derive offset[N-1] from offset[N]
     end
     return out
 end
+
+@btime E = L0 * x
 
 
 function l_j(N)
