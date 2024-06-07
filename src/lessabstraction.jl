@@ -90,10 +90,7 @@ function Base.getindex(::ElevationMatrix{N}, m, n) where {N}
     else return 0.0 end
 end
 
-
 @btime ElevationMatrix{7}()
-
-
 
 function tri_offsets(N)
     tup = [0]
@@ -133,15 +130,16 @@ ReductionMatrix{6}()
 ElevationMatrix{6}()
 @test ReductionMatrix{6}() ≈ transpose(ElevationMatrix{6}())
 
+# assumes i,j >= 0
+ij_to_linear(i,j,offset) = i + offset[j+1] + 1 
+
 # pass in offsets(N).
 """
 multiplies x by the reduction matrix: N -> N - 1
 
 pass in offsets(Tri(), N)
 """
-ij_to_linear(i,j,offset) = i + offset[j+1] + 1 
-
-function reduction_multiply!(out, N, x, offset)
+function reduction_multiply!(out, ::ReductionMatrix{N}, x, offset) where N
     row = 1
     @inbounds for j in 0:N-1
         for i in 0:N-1-j
@@ -160,7 +158,7 @@ end
 
 x = rand(Float64, 36)
 
-@btime reduction_multiply!($(zeros(28)), 7, $(x), $(offsets(Tri(), 7)))
+@btime reduction_multiply!($(zeros(28)), ReductionMatrix{7}(), $(x), $(offsets(Tri(), 7)))
 @test reduction_multiply!(zeros(28), 7, x, offsets(Tri(), 7)) ≈ transpose(transpose(x) * ElevationMatrix{7}())
 
 """ Multiplication """
@@ -190,8 +188,6 @@ function fast!(out, N, L0, x, offset, l_j)
     return out
 end
 
-@btime E = L0 * x
-
 
 function l_j(N)
     return ntuple(j -> ((isodd(j) ? -1.0 : 1.0) * binomial(N, j) / (1.0 + j)), 7) 
@@ -205,7 +201,7 @@ out = zeros(Float64, 120)
 offset_table = ntuple(i-> Tuple(vcat(collect(tri_offsets(i)), zeros(Int, N-i))),N)
 L0 = (N + 1)^2/2 * sparse(transpose(ElevationMatrix{N+1}()) * ElevationMatrix{N+1}())
 #the above are precomputed
-@btime fast!($(out), $N, $L0, $x, $(offset_table), $(l_j(N)))
+@btime fast!($(out), N, $L0, $x, $(offset_table), $(l_j(N)))
 @btime mul!($(out), $(lift(7)), $(x))
 
 @code_warntype fast!(out, 7, L0, x, offset_table, l_j(N))
