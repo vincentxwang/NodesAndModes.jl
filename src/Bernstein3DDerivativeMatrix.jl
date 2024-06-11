@@ -86,9 +86,9 @@ Computes the derivative with respect to the r coordinate and stores the result i
 - `x`: The input vector.
 - `offset`: The precomputed offset values given by `offsets(N)`.
 """
-function fast!(out, ::BernsteinDerivativeMatrix_3D_r{N}, x, tri_offset, tet_offset) where {N}
+function fast!(out, N, x, tri_offset, tet_offset)
     row = 1
-    for k in 0:N
+    @inbounds for k in 0:N
         for j in 0:N - k
             for i in 0:N - j - k
                 l = N - i - j - k
@@ -218,7 +218,7 @@ out = similar(x)
 @test fast!(copy(out), BernsteinDerivativeMatrix_3D_s{N}(), x, tri_offsets(N), tet_offsets(N)) ≈ 0.5 * (evaluate_bernstein_derivative_matrices(Tet(), N)[2] - evaluate_bernstein_derivative_matrices(Tet(), N)[4]) * x
 @test fast!(copy(out), BernsteinDerivativeMatrix_3D_t{N}(), x, tri_offsets(N), tet_offsets(N)) ≈ 0.5 * (evaluate_bernstein_derivative_matrices(Tet(), N)[3] - evaluate_bernstein_derivative_matrices(Tet(), N)[4]) * x
 
-
-@btime fast!($(copy(out)), BernsteinDerivativeMatrix_3D_r{7}(), $(x), $(tri_offsets(N)), $(tet_offsets(N)))
+using BenchmarkTools
+@btime fast!($(copy(out)), 7, $(x), $(tri_offsets(7)), $(tet_offsets(7)))
 mat = evaluate_bernstein_derivative_matrices(Tet(), 7)[1] - evaluate_bernstein_derivative_matrices(Tet(), 7)[4]
 @btime mul!($(copy(out)), $(mat), $(x))
